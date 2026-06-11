@@ -182,12 +182,22 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle;max-width:220px;
 var rows = [], urlColumn = '', results = [], running = false;
 var hunterCalls = 0, hunterQuotaLeft = null;
 
+// Restore saved Hunter key
+(function() {
+  var saved = localStorage.getItem('axelio_hunter_key');
+  if (saved) document.getElementById('hunterKey').value = saved;
+})();
+
 // Badge refresh
 setInterval(function() {
   var hk = document.getElementById('hunterKey').value.trim();
   var b = document.getElementById('hunterBadge');
-  if (hk.length > 20) { b.className = 'badge badge-ok'; b.textContent = '✓ Configurée'; }
-  else { b.className = 'badge badge-warn'; b.textContent = '⚠ Requise'; }
+  if (hk.length > 20) {
+    b.className = 'badge badge-ok'; b.textContent = '✓ Configurée';
+    localStorage.setItem('axelio_hunter_key', hk);
+  } else {
+    b.className = 'badge badge-warn'; b.textContent = '⚠ Requise';
+  }
 }, 300);
 
 // File handling
