@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Axelio — Lead Enricher</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg:#0f0f13;--bg2:#16161d;--bg3:#1e1e28;--border:#2a2a38;
+  --accent:#7c5cfc;--text:#e8e6f0;--muted:#7a7890;
+  --success:#34d399;--warning:#fbbf24;--danger:#f87171;
+  --radius:10px;--font:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;min-height:100vh}
+.shell{max-width:900px;margin:0 auto;padding:32px 20px 60px}
+.header{display:flex;align-items:center;gap:14px;margin-bottom:32px}
+.logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#7c5cfc,#c084fc);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;color:#fff;flex-shrink:0}
+.header h1{font-size:20px;font-weight:600;letter-spacing:-.3px}
+.header p{color:var(--muted);font-size:13px;margin-top:2px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:14px}
+.card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}
+.api-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+.api-field input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;transition:border-color .15s}
+.api-field input:focus{border-color:var(--accent)}
+.badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;margin-top:6px;display:inline-block}
+.badge-ok{background:#0d2e22;color:var(--success)}
+.badge-warn{background:#2d2000;color:var(--warning)}
+.info-box{background:#1a1535;border:1px solid #3a2a6a;border-radius:8px;padding:12px 14px;font-size:12px;color:#a78bfa;margin-top:14px;line-height:1.6}
+.info-box strong{color:var(--text)}
+.dropzone{border:1.5px dashed var(--border);border-radius:var(--radius);padding:28px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;position:relative}
+.dropzone:hover,.dropzone.over{border-color:var(--accent);background:#1a1728}
+.dropzone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.dropzone-icon{font-size:26px;margin-bottom:6px}
+.dropzone p{color:var(--muted);font-size:13px}
+.dropzone strong{color:var(--text)}
+.col-select{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.col-select label{font-size:13px;color:var(--muted)}
+.col-select select{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;cursor:pointer}
+.run-btn{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s}
+.run-btn:hover{opacity:.88}
+.progress-wrap{margin-top:14px;display:none}
+.progress-bar-bg{height:5px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),#c084fc);border-radius:3px;transition:width .4s ease;width:0%}
+.progress-info{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px}
+.cost-bar{display:flex;align-items:center;gap:16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-top:14px;flex-wrap:wrap;display:none}
+.cost-item{display:flex;flex-direction:column;gap:3px}
+.cost-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.cost-value{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.cost-sep{width:1px;height:36px;background:var(--border);flex-shrink:0}
+.cost-note{font-size:11px;color:var(--muted);margin-left:auto;line-height:1.5}
+.results-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.results-header h2{font-size:15px;font-weight:600}
+.export-btn{padding:7px 14px;border-radius:7px;background:#1e2d1e;border:1px solid #2a4a2a;color:var(--success);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer}
+.stats-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.stat-pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.stat-found{background:#0d2e22;color:var(--success)}
+.stat-miss{background:#2d1010;color:var(--danger)}
+.stat-hunter{background:#1a1535;color:#a78bfa}
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse}
+thead th{background:var(--bg3);padding:10px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);white-space:nowrap}
+tbody tr{border-top:1px solid var(--border)}
+tbody tr:hover{background:var(--bg3)}
+tbody td{padding:10px 14px;font-size:13px;vertical-align:middle;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-email{font-weight:500}
+.td-empty{color:var(--muted);font-style:italic}
+.source-tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
+.src-hunter{background:#18103a;color:#a78bfa}
+.src-none{background:#2a1a1a;color:var(--danger)}
+.conf-wrap{display:flex;align-items:center;gap:6px}
+.conf-bar{height:4px;border-radius:2px;background:var(--accent)}
+.conf-label{font-size:11px;color:var(--muted)}
+.log-area{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-family:'Courier New',monospace;font-size:11px;color:var(--muted);max-height:220px;overflow-y:auto;margin-top:14px;display:none}
+.log-line{line-height:1.9}
+.log-ok{color:var(--success)}
+.log-warn{color:var(--warning)}
+.log-err{color:var(--danger)}
+.log-info{color:#a78bfa}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="header">
+    <div class="logo">A</div>
+    <div>
+      <h1>Axelio — Lead Enricher</h1>
+      <p>Importez un Excel de sites web → récupérez les emails des dirigeants via Hunter.io</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Clé API Hunter.io</div>
+    <div class="api-field">
+      <label>Clé API Hunter.io — obligatoire</label>
+      <input type="password" id="hunterKey" placeholder="Votre clé Hunter...">
+      <span class="badge badge-warn" id="hunterBadge">⚠ Requise</span>
+    </div>
+    <div class="info-box">
+      <strong>Comment ça marche :</strong> Hunter.io recherche les emails professionnels associés à chaque domaine et identifie le dirigeant principal (CEO, fondateur, directeur).<br>
+      Clé gratuite sur <strong>hunter.io → Dashboard → API</strong> — 25 recherches/mois offertes.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Fichier Excel</div>
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+      <div class="dropzone-icon">📂</div>
+      <p><strong>Glissez votre fichier ici</strong> ou cliquez pour parcourir</p>
+      <p style="margin-top:4px;font-size:12px">Excel ou CSV — doit contenir une colonne avec les URLs des sites</p>
+    </div>
+    <div class="col-select" id="colSelect" style="display:none">
+      <label>Colonne des sites :</label>
+      <select id="colPicker"></select>
+      <span id="rowCount" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <button class="run-btn" id="runBtn" onclick="startEnrichment()">
+    <span id="runIcon">▶</span>
+    <span id="runLabel">Lancer l'enrichissement</span>
+  </button>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+    <div class="progress-info">
+      <span id="progressText">Initialisation...</span>
+      <span id="progressPct">0%</span>
+    </div>
+  </div>
+
+  <div class="cost-bar" id="costBar">
+    <div class="cost-item">
+      <span class="cost-label">Domaines traités</span>
+      <span class="cost-value" id="costDomains" style="color:var(--text)">0</span>
+    </div>
+    <div class="cost-sep"></div>
+    <div class="cost-item">
+      <span class="cost-label">Emails trouvés</span>
+      <span class="cost-value" id="costFound" style="color:var(--success)">0</span>
+    </div>
+    <div class="cost-sep"></div>
+    <div class="cost-item">
+      <span class="cost-label">Appels Hunter</span>
+      <span class="cost-value" id="costCalls" style="color:#a78bfa">0</span>
+    </div>
+    <div class="cost-sep"></div>
+    <div class="cost-item">
+      <span class="cost-label">Quota restant</span>
+      <span class="cost-value" id="costQuota" style="color:var(--warning)">—</span>
+    </div>
+    <div class="cost-note">Hunter gratuit : 25 req/mois<br>Starter : 500 req/mois à 49€</div>
+  </div>
+
+  <div class="log-area" id="logArea"></div>
+
+  <div id="resultsSection" style="display:none;margin-top:24px">
+    <div class="results-header">
+      <h2>Résultats</h2>
+      <button class="export-btn" onclick="exportResults()">⬇ Exporter Excel</button>
+    </div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Domaine</th><th>Email dirigeant</th><th>Nom</th><th>Poste</th><th>Confiance</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+<script>
+var rows = [], urlColumn = '', results = [], running = false;
+var hunterCalls = 0, hunterQuotaLeft = null;
+
+// Badge refresh
+setInterval(function() {
+  var hk = document.getElementById('hunterKey').value.trim();
+  var b = document.getElementById('hunterBadge');
+  if (hk.length > 20) { b.className = 'badge badge-ok'; b.textContent = '✓ Configurée'; }
+  else { b.className = 'badge badge-warn'; b.textContent = '⚠ Requise'; }
+}, 300);
+
+// File handling
+var dz = document.getElementById('dropzone');
+dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', function() { dz.classList.remove('over'); });
+dz.addEventListener('drop', function(e) { e.preventDefault(); dz.classList.remove('over'); handleFile(e.dataTransfer.files[0]); });
+document.getElementById('fileInput').addEventListener('change', function() { handleFile(this.files[0]); });
+
+function handleFile(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'binary' });
+      var data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      if (!data.length) { alert('Fichier vide.'); return; }
+      rows = data;
+      var cols = Object.keys(data[0]);
+      var picker = document.getElementById('colPicker');
+      picker.innerHTML = '';
+      cols.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        picker.appendChild(opt);
+      });
+      var auto = cols.find(function(c) { return /site|url|web|domain|domaine/i.test(c); }) || cols[0];
+      picker.value = auto; urlColumn = auto;
+      picker.onchange = function() { urlColumn = this.value; };
+      document.getElementById('colSelect').style.display = 'flex';
+      document.getElementById('rowCount').textContent = data.length + ' lignes';
+      document.querySelector('.dropzone p').innerHTML = '<strong>' + file.name + '</strong> chargé ✓';
+    } catch(err) { alert('Erreur : ' + err.message); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function log(msg, type) {
+  var el = document.getElementById('logArea');
+  el.style.display = 'block';
+  var d = document.createElement('div');
+  d.className = 'log-line' + (type ? ' log-' + type : '');
+  d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+function normalizeDomain(raw) {
+  try {
+    var s = raw.trim();
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    return new URL(s).hostname.replace(/^www\./, '');
+  } catch(e) { return raw.trim().replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0]; }
+}
+
+function updateCostBar(found) {
+  document.getElementById('costBar').style.display = 'flex';
+  document.getElementById('costDomains').textContent = hunterCalls;
+  document.getElementById('costFound').textContent = found;
+  document.getElementById('costCalls').textContent = hunterCalls;
+  if (hunterQuotaLeft !== null) {
+    document.getElementById('costQuota').textContent = hunterQuotaLeft;
+    var el = document.getElementById('costQuota');
+    el.style.color = hunterQuotaLeft < 5 ? 'var(--danger)' : hunterQuotaLeft < 10 ? 'var(--warning)' : 'var(--success)';
+  }
+}
+
+async function hunterSearch(domain, apiKey) {
+  try {
+    var url = 'https://api.hunter.io/v2/domain-search?domain=' + encodeURIComponent(domain) + '&api_key=' + encodeURIComponent(apiKey) + '&limit=10';
+    var resp = await fetch(url);
+    var data = await resp.json();
+
+    // Track quota from meta
+    if (data.meta && data.meta.calls_left !== undefined) {
+      hunterQuotaLeft = data.meta.calls_left;
+    }
+
+    if (data.errors && data.errors.length) {
+      log('  ⚠ Hunter : ' + data.errors[0].details, 'err');
+      return null;
+    }
+    if (!data.data) return null;
+
+    var emails = data.data.emails || [];
+    if (!emails.length) return null;
+
+    var leaderRx = /ceo|founder|co-founder|directeur|dirigeant|président|owner|gérant|dg|pdg|managing|director|chief|head|associé/i;
+    var best = emails.map(function(e) {
+      return Object.assign({}, e, {
+        score: (e.confidence || 0) + (leaderRx.test(e.position || '') ? 60 : 0) + (e.type === 'personal' ? 10 : 0)
+      });
+    }).sort(function(a, b) { return b.score - a.score; })[0];
+
+    return {
+      email: best.value,
+      name: [best.first_name, best.last_name].filter(Boolean).join(' '),
+      position: best.position || '',
+      confidence: best.confidence || 50
+    };
+  } catch(e) {
+    log('  ⚠ Erreur Hunter : ' + e.message, 'err');
+    return null;
+  }
+}
+
+async function startEnrichment() {
+  if (running) return;
+  var hunterKey = document.getElementById('hunterKey').value.trim();
+  if (!hunterKey) { alert('Entrez votre clé API Hunter.io.'); document.getElementById('hunterKey').focus(); return; }
+  if (!rows.length) { alert('Chargez d\'abord un fichier Excel.'); return; }
+
+  running = true; results = []; hunterCalls = 0; hunterQuotaLeft = null;
+  document.getElementById('runBtn').style.opacity = '0.5';
+  document.getElementById('runBtn').style.pointerEvents = 'none';
+  document.getElementById('runLabel').textContent = 'Enrichissement en cours...';
+  document.getElementById('runIcon').innerHTML = '<span class="spinner"></span>';
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('resultsSection').style.display = 'none';
+  document.getElementById('costBar').style.display = 'none';
+  document.getElementById('logArea').innerHTML = '';
+  document.getElementById('logArea').style.display = 'block';
+
+  var total = rows.length;
+  log('Démarrage — ' + total + ' prospects', 'info');
+
+  for (var i = 0; i < total; i++) {
+    var row = rows[i];
+    var rawUrl = (row[urlColumn] || '').toString().trim();
+
+    if (!rawUrl) {
+      results.push({ row: row, email: '', name: '', position: '', confidence: 0, domain: '' });
+      setProgress(i+1, total, 'URL vide, ignoré');
+      continue;
+    }
+
+    var domain = normalizeDomain(rawUrl);
+    log('[' + (i+1) + '/' + total + '] ' + domain + ' — recherche Hunter...');
+
+    hunterCalls++;
+    var found = await hunterSearch(domain, hunterKey);
+
+    if (found) {
+      log('  ✓ ' + found.email + (found.name ? ' — ' + found.name : '') + ' (' + found.confidence + '%)', 'ok');
+    } else {
+      log('  ✗ Aucun email trouvé', 'err');
+    }
+
+    results.push({
+      row: row,
+      email: found ? found.email : '',
+      name: found ? found.name : '',
+      position: found ? found.position : '',
+      confidence: found ? found.confidence : 0,
+      domain: domain
+    });
+
+    var foundCount = results.filter(function(r) { return r.email; }).length;
+    updateCostBar(foundCount);
+    setProgress(i+1, total, (i+1) + ' / ' + total + ' traités');
+    await sleep(300);
+  }
+
+  var nb = results.filter(function(r) { return r.email; }).length;
+  log('Terminé — ' + nb + '/' + total + ' emails trouvés.', 'info');
+  running = false;
+  document.getElementById('runBtn').style.opacity = '1';
+  document.getElementById('runBtn').style.pointerEvents = 'auto';
+  document.getElementById('runLabel').textContent = 'Relancer';
+  document.getElementById('runIcon').textContent = '↺';
+  renderResults();
+}
+
+function setProgress(done, total, text) {
+  var pct = Math.round((done/total)*100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressText').textContent = text;
+}
+
+function renderResults() {
+  document.getElementById('resultsSection').style.display = 'block';
+  var found = results.filter(function(r) { return r.email; }).length;
+  var missed = results.filter(function(r) { return !r.email; }).length;
+
+  document.getElementById('statsRow').innerHTML =
+    '<span class="stat-pill stat-found">✓ ' + found + ' emails trouvés</span>' +
+    '<span class="stat-pill stat-hunter">🔍 ' + hunterCalls + ' appels Hunter</span>' +
+    '<span class="stat-pill stat-miss">✗ ' + missed + ' non trouvés</span>';
+
+  var html = '';
+  results.forEach(function(r) {
+    var srcTag = r.email
+      ? '<span class="source-tag src-hunter">Hunter.io</span>'
+      : '<span class="source-tag src-none">Non trouvé</span>';
+    var conf = r.confidence
+      ? '<div class="conf-wrap"><div class="conf-bar" style="width:' + Math.round(r.confidence * 0.7) + 'px"></div><span class="conf-label">' + r.confidence + '%</span></div>'
+      : '—';
+    html += '<tr>' +
+      '<td title="' + r.domain + '">' + (r.domain || '—') + '</td>' +
+      '<td class="td-email" title="' + r.email + '">' + (r.email || '<span class="td-empty">—</span>') + '</td>' +
+      '<td title="' + r.name + '">' + (r.name || '<span class="td-empty">—</span>') + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + (r.position || '—') + '</td>' +
+      '<td>' + conf + '</td>' +
+      '</tr>';
+  });
+  document.getElementById('resultsBody').innerHTML = html;
+}
+
+function exportResults() {
+  var data = results.map(function(r) {
+    var obj = Object.assign({}, r.row);
+    obj['Email Dirigeant'] = r.email;
+    obj['Nom'] = r.name;
+    obj['Poste'] = r.position;
+    obj['Confiance (%)'] = r.confidence;
+    obj['Domaine'] = r.domain;
+    return obj;
+  });
+  var ws = XLSX.utils.json_to_sheet(data);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads enrichis');
+  XLSX.writeFile(wb, 'axelio-leads-' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+</script>
+</body>
+</html>
