@@ -250,11 +250,11 @@ function updateCostBar(found) {
   document.getElementById('costDomains').textContent = hunterCalls;
   document.getElementById('costFound').textContent = found;
   document.getElementById('costCalls').textContent = hunterCalls;
-  if (hunterQuotaLeft !== null) {
-    document.getElementById('costQuota').textContent = hunterQuotaLeft;
-    var el = document.getElementById('costQuota');
-    el.style.color = hunterQuotaLeft < 5 ? 'var(--danger)' : hunterQuotaLeft < 10 ? 'var(--warning)' : 'var(--success)';
-  }
+  // If Hunter returns quota info use it, otherwise estimate from 25 free calls
+  var quota = hunterQuotaLeft !== null ? hunterQuotaLeft : Math.max(0, 25 - hunterCalls);
+  var quotaEl = document.getElementById('costQuota');
+  quotaEl.textContent = hunterQuotaLeft !== null ? quota : '~' + quota;
+  quotaEl.style.color = quota <= 0 ? 'var(--danger)' : quota < 5 ? 'var(--danger)' : quota < 10 ? 'var(--warning)' : 'var(--success)';
 }
 
 async function hunterSearch(domain, apiKey) {
