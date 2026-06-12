@@ -315,7 +315,8 @@ async function scrapeSiren(rawUrl) {
             var raw9 = legalCtx[i].match(/\b(\d{3})[\s\-]?(\d{3})[\s\-]?(\d{3})\b/);
             if (raw9) {
               var s9 = raw9[1]+raw9[2]+raw9[3];
-              if (s9.length===9) return s9;
+              // Validate: SIREN must be 9 digits and not start with 0000
+              if (s9.length===9 && s9 !== '000000000' && !/^0{5}/.test(s9)) return s9;
             }
           }
         }
@@ -329,29 +330,59 @@ async function scrapeSiren(rawUrl) {
 // ── Step 2: Pappers API → get dirigeant ──────────────────────
 async function getPappersDirector(siren, pappersKey) {
   try {
-    var url = 'https://api.pappers.fr/v2/entreprise?api_token='+encodeURIComponent(pappersKey)+'&siren='+encodeURIComponent(siren)+'&dirigeants=true';
+    // Try v2 first
+    var url = 'https://api.pappers.fr/v2/entreprise?api_token='+encodeURIComponent(pappersKey)+'&siren='+encodeURIComponent(siren);
     var resp = await fetch(url);
+    if (!resp.ok) return null;
     var data = await resp.json();
-    if (!data || data.error) return null;
+    if (!data || data.error || data.message) {
+      log('  ⚠ Pappers erreur : '+(data.message||data.error||'inconnue'), 'warn');
+      return null;
+    }
 
-    var dirigeants = data.dirigeants || [];
-    if (!dirigeants.length) return null;
+    // Log raw structure for debugging
+    var keys = Object.keys(data);
+    log('  ℹ Pappers champs : '+keys.slice(0,8).join(', '), 'step');
 
-    // Priority: Président, Directeur Général, Gérant, CEO, then first
-    var priorityRx = /président|directeur général|gérant|pdg|ceo|dg\b|associé gérant/i;
-    var best = dirigeants.find(function(d){return priorityRx.test(d.qualite||'');}) || dirigeants[0];
+    // Try multiple field names Pappers might use
+    var dirigeants = data.dirigeants || data.representants || data.mandataires || [];
 
-    var prenom = best.prenom || best.first_name || '';
-    var nom = best.nom || best.last_name || '';
-    if (!nom) return null;
+    // Also check nested
+    if (!dirigeants.length && data.entreprise) {
+      dirigeants = data.entreprise.dirigeants || data.entreprise.representants || [];
+    }
+
+    if (!dirigeants.length) {
+      log('  ⚠ Pappers : aucun dirigeant dans la réponse (champs disponibles: '+keys.join(', ')+')', 'warn');
+      return null;
+    }
+
+    var priorityRx = /président|directeur.général|gérant|pdg|ceo|dg\b|associé.gérant|administrateur/i;
+    var best = dirigeants.find(function(d){
+      return priorityRx.test(d.qualite||d.quality||d.fonction||'');
+    }) || dirigeants[0];
+
+    var prenom = (best.prenom||best.first_name||best.firstName||'').trim();
+    var nom = (best.nom||best.last_name||best.lastName||best.name||'').trim();
+
+    if (!nom) {
+      log('  ⚠ Pappers : nom dirigeant vide dans '+JSON.stringify(best).slice(0,100), 'warn');
+      return null;
+    }
+
+    var position = best.qualite||best.quality||best.fonction||best.role||'';
+    log('  ✓ Pappers dirigeant brut : '+JSON.stringify({prenom:prenom,nom:nom,qualite:position}), 'ok');
 
     return {
       firstName: prenom,
       lastName: nom,
       fullName: (prenom+' '+nom).trim(),
-      position: best.qualite || best.quality || ''
+      position: position
     };
-  } catch(e){ return null; }
+  } catch(e){
+    log('  ⚠ Pappers exception : '+e.message, 'err');
+    return null;
+  }
 }
 
 // ── Step 3: Hunter Email Finder (nom + domaine) ───────────────
