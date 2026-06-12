@@ -103,9 +103,9 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle;max-width:200px;
     <div class="card-title">Clés API</div>
     <div class="api-grid">
       <div class="api-field">
-        <label>Clé API Pappers — dirigeant via SIREN</label>
-        <input type="password" id="pappersKey" placeholder="Votre token Pappers...">
-        <span class="badge badge-warn" id="pappersBadge">⚠ Requise</span>
+        <label>API Gouvernement française — dirigeant via SIREN</label>
+        <input type="text" id="pappersKey" placeholder="Clé Pappers (optionnel, fallback)" value="">
+        <span class="badge badge-ok" id="pappersBadge">✓ Gratuite, sans clé</span>
       </div>
       <div class="api-field">
         <label>Clé API Hunter.io — email du dirigeant</label>
@@ -116,7 +116,7 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle;max-width:200px;
     <div class="flow-box">
       <strong>Pipeline de recherche :</strong><br>
       <span class="flow-step">1. Mentions légales</span> → extrait le SIREN &nbsp;
-      <span class="flow-step">2. Pappers API</span> → nom + prénom du dirigeant &nbsp;
+      <span class="flow-step">2. API Gouv 🇫🇷</span> → nom + prénom du dirigeant (gratuit) &nbsp;
       <span class="flow-step">3. Hunter Finder</span> → email précis par nom &nbsp;
       <span class="flow-step">4. Hunter Domain</span> → fallback si étapes précédentes échouent
     </div>
@@ -217,8 +217,10 @@ setInterval(function() {
   var hk = document.getElementById('hunterKey').value.trim();
   var pb = document.getElementById('pappersBadge');
   var hb = document.getElementById('hunterBadge');
-  if (pk.length > 10) { pb.className='badge badge-ok'; pb.textContent='✓ Configurée'; localStorage.setItem('axelio_pappers_key', pk); }
-  else { pb.className='badge badge-warn'; pb.textContent='⚠ Requise'; }
+  // Pappers key optional - gov API is free
+  pb.className='badge badge-ok';
+  pb.textContent = pk.length > 10 ? '✓ Pappers configuré' : '✓ Gratuite, sans clé';
+  if (pk.length > 10) localStorage.setItem('axelio_pappers_key', pk);
   if (hk.length > 20) { hb.className='badge badge-ok'; hb.textContent='✓ Configurée'; localStorage.setItem('axelio_hunter_key', hk); }
   else { hb.className='badge badge-warn'; hb.textContent='⚠ Requise'; }
 }, 300);
@@ -327,51 +329,47 @@ async function scrapeSiren(rawUrl) {
   return null;
 }
 
-// ── Step 2: Pappers API → get dirigeant ──────────────────────
+// ── Step 2: API Gouvernement → dirigeant via SIREN ───────────
 async function getPappersDirector(siren, pappersKey) {
   try {
-    // Try v2 first
-    var url = 'https://api.pappers.fr/v2/entreprise?api_token='+encodeURIComponent(pappersKey)+'&siren='+encodeURIComponent(siren);
+    // Use free French government API (no key needed)
+    var url = 'https://recherche-entreprises.api.gouv.fr/search?q='+encodeURIComponent(siren)+'&per_page=1';
     var resp = await fetch(url);
-    if (!resp.ok) return null;
+    if (!resp.ok) { log('  ⚠ API gouv : HTTP '+resp.status, 'warn'); return null; }
     var data = await resp.json();
-    if (!data || data.error || data.message) {
-      log('  ⚠ Pappers erreur : '+(data.message||data.error||'inconnue'), 'warn');
-      return null;
+
+    var results = data.results || [];
+    if (!results.length) {
+      // Try Pappers as fallback with correct field
+      log('  → API gouv : aucun résultat, essai Pappers...', 'warn');
+      return await getPappersDirectorFallback(siren, pappersKey);
     }
 
-    // Log raw structure for debugging
-    var keys = Object.keys(data);
-    log('  ℹ Pappers champs : '+keys.slice(0,8).join(', '), 'step');
-
-    // Try multiple field names Pappers might use
-    var dirigeants = data.dirigeants || data.representants || data.mandataires || [];
-
-    // Also check nested
-    if (!dirigeants.length && data.entreprise) {
-      dirigeants = data.entreprise.dirigeants || data.entreprise.representants || [];
-    }
+    var entreprise = results[0];
+    var dirigeants = entreprise.dirigeants || [];
 
     if (!dirigeants.length) {
-      log('  ⚠ Pappers : aucun dirigeant dans la réponse (champs disponibles: '+keys.join(', ')+')', 'warn');
-      return null;
+      log('  → API gouv : aucun dirigeant trouvé', 'warn');
+      return await getPappersDirectorFallback(siren, pappersKey);
     }
 
-    var priorityRx = /président|directeur.général|gérant|pdg|ceo|dg\b|associé.gérant|administrateur/i;
+    // Priority: gérant, président, DG, then first
+    var priorityRx = /président|directeur.général|gérant|pdg|ceo|dg$/i;
     var best = dirigeants.find(function(d){
-      return priorityRx.test(d.qualite||d.quality||d.fonction||'');
+      return priorityRx.test(d.qualite||d.fonction||'');
     }) || dirigeants[0];
 
-    var prenom = (best.prenom||best.first_name||best.firstName||'').trim();
-    var nom = (best.nom||best.last_name||best.lastName||best.name||'').trim();
+    var prenoms = (best.prenoms||best.prenom||'').trim();
+    var nom = (best.nom||'').trim();
 
-    if (!nom) {
-      log('  ⚠ Pappers : nom dirigeant vide dans '+JSON.stringify(best).slice(0,100), 'warn');
-      return null;
-    }
+    // For physical persons, prenoms is an array or string
+    if (Array.isArray(prenoms)) prenoms = prenoms[0]||'';
+    var prenom = prenoms.split(' ')[0]; // take first name only
 
-    var position = best.qualite||best.quality||best.fonction||best.role||'';
-    log('  ✓ Pappers dirigeant brut : '+JSON.stringify({prenom:prenom,nom:nom,qualite:position}), 'ok');
+    if (!nom) { log('  → API gouv : nom dirigeant vide', 'warn'); return null; }
+
+    var position = best.qualite||best.fonction||'';
+    log('  ✓ Dirigeant : '+prenom+' '+nom+' ('+position+')', 'ok');
 
     return {
       firstName: prenom,
@@ -380,9 +378,35 @@ async function getPappersDirector(siren, pappersKey) {
       position: position
     };
   } catch(e){
-    log('  ⚠ Pappers exception : '+e.message, 'err');
+    log('  ⚠ API gouv exception : '+e.message, 'err');
     return null;
   }
+}
+
+// Pappers fallback with correct v2 field (representants)
+async function getPappersDirectorFallback(siren, pappersKey) {
+  if (!pappersKey) return null;
+  try {
+    var url = 'https://api.pappers.fr/v2/entreprise?api_token='+encodeURIComponent(pappersKey)+'&siren='+encodeURIComponent(siren);
+    var resp = await fetch(url);
+    if (!resp.ok) return null;
+    var data = await resp.json();
+    if (!data || data.error) return null;
+
+    // Pappers v2 uses "representants" not "dirigeants"
+    var reps = data.representants || data.dirigeants || [];
+    if (!reps.length) return null;
+
+    var priorityRx = /président|directeur.général|gérant|pdg|ceo|dg$/i;
+    var best = reps.find(function(d){return priorityRx.test(d.qualite||'');}) || reps[0];
+
+    var prenom = (best.prenom||'').trim().split(' ')[0];
+    var nom = (best.nom||'').trim();
+    if (!nom) return null;
+
+    log('  ✓ Pappers dirigeant : '+prenom+' '+nom+' ('+( best.qualite||'')+')','ok');
+    return { firstName:prenom, lastName:nom, fullName:(prenom+' '+nom).trim(), position:best.qualite||'' };
+  } catch(e){ return null; }
 }
 
 // ── Step 3: Hunter Email Finder (nom + domaine) ───────────────
